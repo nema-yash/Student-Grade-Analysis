@@ -23,6 +23,7 @@ Q2: What factors are seen to impact the student performance in final exam G3?
 Q3: What are the most important variables that can be used to predict the final grade G3 performance?
 
 **Summary**
+
 In Section 1, we tried to understand demographic and psychological behavior of students enrolled in Mathematics class in Portuguese schools. We saw that mathematics classes majorly consisted of students of ages between 15-18 and higher percentage of females were enrolled in the course. We also saw that having mother as primary guardian impacts the alcohol consumption and final G3 grades. The job and education of the student’s mother played a crucial role in predicting the final G3 performance. Also, we found that larger
 number of students live in urban areas and have a lower travel time to schools due to this.
 
