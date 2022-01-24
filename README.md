@@ -1,6 +1,6 @@
 # Student Alcohol consumption and impact on grades in Mathematics class in Portuguese School
 
-**Overview: **
+**Overview**:
 
 Analyzed 34 attributes to understand Math Class (395 students) student pen portrait and factors driving alcohol consumption among students and understand what factors that most impacted final grades of Student
 
@@ -23,7 +23,7 @@ Q2: What factors are seen to impact the student performance in final exam G3?
 Q3: What are the most important variables that can be used to predict the final grade G3 performance?
 
 **Summary**
-In Section 1, we tried to understand demographic and psychological behavior of students enrolled in Mathematics class in Portuguese schools. We saw that mathematics classes majorly consisted of students of ages between 15-18 and higher percentage of females were enrolled in the course. We also saw that having mother as primary guardian impacts the alcohol consumption and final G3 grades. The job and education of the student’s mother played a crucial role in predicting the final G3 performance. Also, we found that larger
+In Section 1, we tried to understand demographic and psychological behavior of students enrolled in Mathematics class in Portuguese schools. We saw that mathematics classes majorly consisted of students of ages between 15-18 and higher percentage of females were enrolled in the course. We also saw that having mother as primary guardian impacts the alcohol consumption and final G3 grades. The job and education of the student’s mother played a crucial role in predicting the final G3 performance. Also, we found that larger
 number of students live in urban areas and have a lower travel time to schools due to this.
 
 Then, in section 2, we tried to see what factors lead to alcohol consumption by students. Here we explored that most students have low alcohol consumption on workdays and weekend and are likely to drink more on 11 weekends compared to weekdays. We didn’t see a very significant impact of Pstatus (Parents separated or Together) on their alcohol consumption habits. We then found that being in a relationship resulted in more alcohol consumption on a workday.
