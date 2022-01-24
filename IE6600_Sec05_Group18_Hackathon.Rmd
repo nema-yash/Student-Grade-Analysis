@@ -1,0 +1,736 @@
+---
+title: "IE6600_Sec05_Group18_Hackathon"
+author: "Simran Bhatia, Yanming Liu, Yash Nema"
+date: "10/12/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(dplyr.summarise.inform = FALSE)
+```
+
+## Introduction and Problem Statement
+Education is an integral factor in development or upliftment of any social group. It is also an essential part of any humans' life: that shapes their personal outlook and opinions and helps them progress. That is why the dataset "Student Alcohol Consumption" was chosen by this group for our hackathon. This data comprises of drinking habits, grades, demographic information and other social factors (parents' education, family size, relationship status, etc) for school-going students in Portugal from 2005-2006. Eurostat's "Early leavers from education and training by sex and labour status" data from 2007 shows Portugal's early leaver from education rate as 36.5% against European Union's average of 15%, thus emphasizing the significance of this subject and its analysis.
+
+Even though Portugal has since pulled through their education crisis exhibiting dropout rate of 8.9% against EU's average of 9.9% in 2020, we aim to explore causation, relations and insights from students' alcohol consumption habits, their grades, and social factors they may be affected by. This report is divided into three sections: ```Understanding Student Audience in Mathematics class of Portuguese Schools```, ```Analyzing factors impacting alcohol consumption among math students in Portuguese Schools```, ```Deep dive into factors impacting grades among mathematics students in Portuguese Schools```. 
+
+In ```Understanding Student Audience in Mathematics class of Portuguese Schools```, exploratory data analysis is conducted on the dataset to understand the dataset, look for points of interest and determine what portion of the data should be explored next. Alcohol consumption habits of Portuguese students are compared against demographic and social indicators such as age, parents' jobs, social life in ```Analyzing factors impacting alcohol consumption among math students in Portuguese Schools```. Finally, geographical, social and demographic data points like study time, travel time, health, and internet access are compared to find trends affecting students' grades and the aforementioned analysis on alcohol consumption is used to determine relationship between students' grades and alcohol consumption in ```Deep dive into factors impacting grades among mathematics students in Portuguese Schools```. 
+
+```{r Libraries, include=FALSE, message=FALSE, warning=FALSE }
+# Data Manipulation libraries
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(reshape2)
+library(magrittr)
+library(lubridate)
+library(DataExplorer)
+library(superml) # Label Encoding columns in dataset
+library(Boruta) # For Variable importance Analysis
+
+# Data Visualization libraries
+library(ggplot2)
+library(ggridges)  
+library(gridExtra)
+library(plotly)
+library(corrplot)  
+library(RColorBrewer)  
+library(cowplot)
+library(ggalluvial)
+library(treemapify)
+library(ggcorrplot)
+```
+```{r Reading dataset, include=FALSE, message=FALSE, warning=FALSE}
+# Reading the Mathematics subject dataset for analysis
+d1<-read.table("student-mat.csv",sep=",",header=TRUE)
+
+#Note: Contains 395 rows and 33 variables, and no NA's are present in the data set, so no NA replacement needed
+```
+## Section 1: Understanding Student Audience in Mathematics Class of Portuguese Schools
+Q1: Who are the students taking mathematics classes in Portugal?
+
+Insight: Math class consists of ~93% students in age group of 15-18 years. School GP consists of significantly higher enrollment of students in Math class compared to school MS, but both contain higher no. of female enrollment compared to male enrollment.
+
+```{r Section 1 - Insight 1, message=FALSE, warning=FALSE, echo=FALSE, fig.height = 4}
+#Split of students by age group
+age_students<-d1%>%
+  select(age)%>%
+  group_by(age)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+  
+plt1<-ggplot(age_students, aes(x = as.factor(age),y=pct_students)) + 
+  geom_bar(stat="identity") +
+  ggtitle("Age vs Total Students (in %)") +
+  xlab("Age") + ylab("Total Students (in %)") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'))
+
+#plt1
+
+#Split of number students by gender and school
+school_gender<-d1%>%
+  select(school,sex)%>%
+  group_by(school,sex)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+plt2<-ggplot(school_gender, aes(x = school,y=num_students, fill=sex)) + 
+  geom_bar(stat="identity", position = "dodge") +
+  ggtitle("School vs Total Students split by Gender") +
+  xlab("School") + ylab("Total Students") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'), legend.position=c(.85,.85)) + 
+  scale_fill_discrete(name = "Gender")
+
+#plt2
+
+title1_1 <- ggdraw() + draw_label("Who are the students taking mathematics classes in Portugal?", fontface="bold")
+row1_1a <- plot_grid(plt1, plt2, nrow = 1, labels = "AUTO")
+plot_grid(title1_1, row1_1a, nrow = 2, rel_heights = c(0.2, 1, 1))
+```
+
+Q2: What is the family background for mathematics students in Portugal?
+
+Insight: Mothers are the primary guardian for most students across different ages. So factors related to mother's education and job could impact future analysis. Most students belong to families that are together. These families tend to have high (Greater than 3) family members. For separated families, we see number of students to be approximately equal for greater than and less than 3 family size. In both Father and Mother Jobs, we can see teacher and health roles have highly educated fathers and mothers. For other jobs we see education levels between 1 and 3. We also observe that both parents generally have same education level.
+
+```{r Section 1 - Insight 2,  message=FALSE, warning=FALSE, echo=FALSE}
+#Number of students by Age and Guardian
+age_guardian<-d1%>%
+  select(age,guardian)%>%
+  group_by(age,guardian)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+plt5<-ggplot(age_guardian, aes(x = as.factor(age),y=num_students, fill=guardian)) + 
+  geom_bar(stat="identity", position = "dodge") +
+  ggtitle("Age vs Students\nsplit by Guardian") +
+  xlab("School") + ylab("# Students") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'), legend.position = "right", legend.text = element_text(size=8), legend.key.size = unit(0.12, 'cm')) + 
+  scale_fill_discrete(name = "Guardian")
+
+#plt5
+
+#Split of number of students Pstatus vs Famsize
+Pstatus_Famsize<-d1%>%
+  select(Pstatus,famsize)%>%
+  group_by(Pstatus,famsize)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+plt6<-ggplot(Pstatus_Famsize, aes(x = Pstatus,y=num_students, fill=famsize)) + 
+  geom_bar(stat="identity", position = "dodge") +
+  ggtitle("Pstatus vs Students\nsplit by Family Size") +
+  xlab("Pstatus") + ylab("# Students") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'), legend.position = "right", legend.text = element_text(size=8), legend.key.size = unit(0.12, 'cm')) + 
+  scale_fill_discrete(name = "Family\nSize")
+
+#plt6
+
+
+#Split of number students by Fjob and Fedu
+Fjob_Fedu<-d1%>%
+  select(Fjob,Fedu)%>%
+  group_by(Fjob,Fedu)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+plt3<-ggplot(Fjob_Fedu, aes(x = Fjob,y=num_students, fill=as.factor(Fedu))) + 
+  ggtitle("Father's Job vs Students\nsplit by Father's Education") +
+  xlab("Father's Job") + ylab("# Students") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'), legend.position = "right", legend.text = element_text(size=8), legend.key.size = unit(0.12, 'cm')) + 
+  scale_fill_discrete(name = "Father's\nEducation") +
+  geom_col(width = 0.5, position = "dodge")
+
+#plt3
+
+#Split of number students by Fjob and Fedu
+Mjob_Medu<-d1%>%
+  select(Mjob,Medu)%>%
+  group_by(Mjob,Medu)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+plt4<-ggplot(Mjob_Medu, aes(x = Mjob,y=num_students, fill=as.factor(Medu))) + 
+  ggtitle("Mother's Job vs Students\nsplit by Mother's Education") +
+  xlab("Mother's Job") + ylab("# Students") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'), legend.position = "right", legend.text = element_text(size=8), legend.key.size = unit(0.12, 'cm')) + 
+  scale_fill_discrete(name = "Mother's\nEducation") +
+  geom_col(width = 0.5, position = "dodge")
+
+#plt4
+
+#Split of number students by Fedu and Medu
+Fedu_Medu<-d1%>%
+  select(Fedu,Medu)%>%
+  group_by(Fedu,Medu)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+plt7<-ggplot(Fedu_Medu, aes(x = Fedu,y=num_students, fill=as.factor(Medu))) + 
+  ggtitle("Father's Education vs Students\nsplit by Mother's Education") +
+  xlab("Father's Education") + ylab("# Students") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'), legend.position = "right", legend.text = element_text(size=8), legend.key.size = unit(0.12, 'cm')) + 
+  scale_fill_discrete(name = "Mother's\nEducation") +
+  geom_col(width = 0.5, position = "dodge")
+
+
+#plt7
+
+
+Fedu_Medu1<-d1%>%
+  select(Fedu,Medu)%>%
+  mutate(Education_combo=paste0("Father's Level ",Fedu," Mother's Level ",Medu))%>%
+  group_by(Education_combo)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))%>%
+  arrange(desc(pct_students))
+
+top5_Fedu_Medu1<-head(Fedu_Medu1,5)%>%
+  select(Education_combo,pct_students)
+
+top5_Fedu_Medu1$Education_combo <- factor(top5_Fedu_Medu1$Education_combo, levels = rev(top5_Fedu_Medu1$Education_combo))
+
+plt8<-ggplot(top5_Fedu_Medu1, aes(x = Education_combo,y=pct_students)) + 
+  ggtitle("Top 5 Parent's Education \nvs Percent of Total Students") +
+  xlab("Parent's Education") + ylab("% Students") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'), legend.position = "right", legend.text = element_text(size=8), legend.key.size = unit(0.12, 'cm')) + 
+  geom_col(width = 0.5, position = "dodge") +
+  coord_flip()
+
+#plt8
+
+title1_2 <- ggdraw() + draw_label("What is the family background for mathematics students in Portugal?", fontface="bold")
+row1_2a <- plot_grid(plt5, plt6, ncol = 2)
+row1_2b <- plot_grid(plt3, plt4, ncol=2)
+row1_2c <- plot_grid(plt8, nrow=1)
+plot_grid(title1_2, row1_2a, row1_2b, row1_2c, nrow = 4, rel_heights = c(1, 3, 3, 3, 3))
+
+```
+
+Q3: How do mathematics students behave/think based on the subject data set in Portugal?
+
+Insight: ~37% math students in Portugal chose their school by course preference. Urban address students generally have a lower travel time, compared to travel time for students living in rural areas. We also see that the level of going out depends on the amount of free time of a student. Higher the free time level, higher the going out level.
+
+```{r Section 1 - Insight 3, message=FALSE, warning=FALSE, echo=FALSE}
+#% Split of Total students by Reason for choosing a school 
+reason_school<-d1%>%
+  select(reason)%>%
+  group_by(reason)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+
+slices <- reason_school$pct_students 
+lbls <- reason_school$reason
+
+lbls <- paste(toupper(lbls), slices) # add percents to labels 
+lbls <- paste(lbls,"%",sep="") # ad % to labels 
+
+pie_p1<-ggplot(reason_school, aes(x = as.factor(reason),y=pct_students, fill=reason)) + 
+  geom_bar(stat="identity") +
+  ggtitle("Reason vs Total Students (in %)") +
+  xlab("Reason") + ylab("Total Students (in %)") + 
+  theme_bw() +
+  theme(text=element_text(size=8), plot.title = element_text(hjust = '0.3'))
+
+# Split of students by address(Urban or Rural) and traveltime
+address_traveltime<-d1%>%
+  select(address,traveltime)%>%
+  group_by(address,traveltime)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+plt9<-ggplot(address_traveltime, aes(x = address,y=num_students, fill=as.factor(traveltime))) + 
+  ggtitle("Address(Urban or Rural) vs Total Students split by traveltime") +
+  xlab("Address(Urban or Rural)") + ylab("Total Students") + 
+  theme_bw() +
+  theme(plot.title = element_text(hjust = '0.5')) + 
+  scale_fill_discrete(name = "Travel Time") +
+  geom_col(width = 0.5, position = "dodge")
+
+# Split of students by Freetime and goout
+freetime_goout<-d1%>%
+  select(freetime,goout)%>%
+  group_by(freetime,goout)%>%
+  summarise(num_students=n())%>%
+  mutate(pct_students=round(num_students/sum(num_students)*100,2))
+
+plt10<-ggplot(freetime_goout, aes(x = freetime,y=num_students, fill=as.factor(goout))) + 
+  ggtitle("Freetime vs Total Students split by Go out") +
+  xlab("Freetime") + ylab("Total Students") + 
+  theme_bw() +
+  theme(plot.title = element_text(hjust = '0.5')) + 
+  scale_fill_discrete(name = "Go out") +
+  geom_col(width = 0.5, position = "dodge")
+
+title1_3 <- ggdraw() + draw_label("How do mathematics students behave/think based\non the subject data set in Portugal?", fontface="bold")
+row1_3a <- plot_grid(pie_p1, ncol = 1)
+row1_3b <- plot_grid(plt9, plt10, ncol=2)
+plot_grid(title1_3, row1_3a, row1_3b, nrow = 3, rel_heights = c(1, 3, 3, 3))
+```
+## Section 2: Analyzing factors impacting alcohol consumption among math students in Portuguese Schools
+
+Q1: When and what age groups consume alcohol in Portugal?
+
+Insight: While alcohol consumption is generally on the lower side(Level 1 consumption dominates), a shift is observed in drinking habits from weekdays to weekend. More students from various Walc alcohol consumption group are consuming alcohol on the weekends than weekdays, and a higher quantity of alcohol is consumed on weekends compared to weekdays.
+
+```{r Section 2 - Insight 1,  message=FALSE, warning=FALSE, echo=FALSE}
+
+#Understanding students drinking habits by Workday and weekend levels
+drinking_habbit <- d1 %>%
+  select(Dalc,Walc)%>%
+  pivot_longer(c(Dalc, Walc), names_to="Dalc_Walc", values_to="Alcohol_Consumption") %>%
+  group_by(Dalc_Walc,Alcohol_Consumption)%>%
+  summarise(Num_students=n())%>%
+  mutate(pct_students=round(Num_students/sum(Num_students)*100,2))
+
+plt11<-ggplot(drinking_habbit, aes(x = Alcohol_Consumption,y=pct_students, fill=as.factor(Dalc_Walc))) + 
+  ggtitle("Students vs Consumption by Time") +
+  theme_bw() +
+  xlab("Alcohol Consumption Level") + ylab("Students Percent(in %)") + 
+  theme(plot.title = element_text(hjust = '0.5'), legend.position="none") +
+  geom_col(width = 0.5, position = "dodge") +
+  theme(plot.title = element_text(size = 13, hjust = "0.5"),
+      legend.key.size = unit(7, "pt"))
+
+
+# plt11
+
+#Age wise Workday and Weekend Alcohol consumption 
+#As most students are between 15-17, age has been filtered for this range to see the trend better
+drinking_habbit_age <- d1 %>%
+  select(age,Dalc,Walc)%>%
+  pivot_longer(c(Dalc, Walc), names_to="Time", values_to="Alcohol_Consumption") %>%
+  group_by(age,Time,Alcohol_Consumption)%>%
+  summarise(Num_students=n())%>%
+  mutate(pct_students=round(Num_students/sum(Num_students)*100,2))%>%
+  filter(age<18)
+
+
+plt12 <- ggplot(drinking_habbit_age,
+                 aes(y = Num_students, axis1 = age, axis2 = Alcohol_Consumption)) +
+  scale_x_discrete(limits = c("age", "Alcohol_Consumption_Level"), expand = c(.2, .05)) +
+  geom_alluvium(aes(fill = Time)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_bw() +
+  ggtitle("Age vs Consumption by Time") +
+  theme(plot.title = element_text(size = 13, hjust = "0.5"),
+        legend.key.size = unit(7, "pt"))
+  
+
+# plt12
+
+title <- ggdraw() + draw_label("Figure 2.1 When and What Age Consume Alcohol?", fontface='bold')
+first_row <- plot_grid(plt11, plt12, nrow = 1, labels = "AUTO")
+plot_grid(title, first_row, nrow = 2, rel_heights = c(0.2, 1, 1))
+```
+Q2: How does Pstatus impact alcohol consumption?
+
+Insight: Observing family status of students ie whether parents are together or apart, shows most students live with both their parents. The same trend is observed for weekday vs weekend alcohol consumption for students regardless of their family status. Students are consuming more alcohol over weekends than weekdays and a larger number of students is consuming alcohol over the weekend than weekdays.
+
+```{r Section 2 - Insight 2,  message=FALSE, warning=FALSE, echo=FALSE, fig.height = 4}
+student_mat<- d1
+
+d3_dalc <- student_mat %>%
+  select(Pstatus, Dalc) %>%
+  group_by(Pstatus, Dalc) %>%
+  summarize(countAlc = n()) %>%
+  mutate(countAlc = ifelse(Pstatus == "A", countAlc * -1, countAlc))
+
+p3_dalc <- ggplot(d3_dalc, aes(x=Dalc, y=countAlc, fill=Pstatus)) +
+  geom_bar(stat="identity", width = 0.95) +
+  scale_y_continuous(breaks=seq(-100, 300, 25), labels=paste0(as.character(c(seq(100, 0, -25), seq(25, 300, 25))))) +
+  labs(title="Figure 2.2 A) Effect of parents' status on workday drinking", x="Alcohol consumption Level", y="Total Students") +
+  coord_flip() +
+  theme_bw()
+
+d3_walc <- student_mat %>%
+  select(Pstatus, Walc) %>%
+  group_by(Pstatus, Walc) %>%
+  summarize(countAlc = n()) %>%
+  mutate(countAlc = ifelse(Pstatus == "A", countAlc * -1, countAlc))
+  
+
+p3_walc <- ggplot(d3_walc, aes(x=Walc, y=countAlc, fill=Pstatus)) +
+  geom_bar(stat="identity", width = 0.95) +
+  scale_y_continuous(breaks=seq(-100, 300, 25), labels=paste0(as.character(c(seq(100, 0, -25), seq(25, 300, 25))))) +
+  labs(title="B) Effect of parents' status on weekend drinking", x="Alcohol consumption Level", y="Total Students") +
+  coord_flip() +
+  theme_bw()
+
+grid.arrange(p3_dalc, p3_walc, nrow=2, ncol=1)
+
+# title <- ggdraw() + draw_label("Figure 2.2 How does the Pstatus impact Alcohol consumption?", fontface='bold')
+# first_row <- plot_grid(p3_dalc, p3_walc, nrow = 2, labels = "AUTO")
+# plot_grid(title, first_row, nrow = 2, rel_heights = c(0.2, 1, 1))
+```
+
+Q3: How does romantic involvement impact alcohol consumption?
+
+Insight:
+As alcohol consumption increases, the ratio of the number of single students to committed ones increases in both daily and weekend alcohol consumption. As can be seen for weekday data below, students involved with romantic partners are more likely to over indulge in weekday drinking.
+
+```{r Section 2 - Insight 3, echo=FALSE, warning=FALSE, message = FALSE}
+
+dr <- d1 %>% 
+    select(romantic, Dalc, Walc)
+
+g1 <- ggplot(dr, mapping = aes(x=as.factor(Dalc), fill=romantic)) +
+    geom_bar(position = "dodge") +
+    theme_bw() +
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=0.5),  plot.title = element_text(hjust = '0.5', size = 11.5), legend.position=c(.85,.83)) +
+    labs(x = "Consumption Level",
+         y = "Student Number") +
+    ylim(0, 200) +
+    ggtitle("Students vs Consumption by Relations")
+
+# calculate the ratio between single and loved student in weekdays
+dn <- dr %>% 
+    group_by(Dalc, romantic) %>% 
+    dplyr::summarise(number = n())
+
+index_yes <- seq(2, 10, 2)
+index_no <- seq(1, 9, 2)
+
+ratio_day <- dn[index_yes, ]$number / dn[index_no, ]$number
+drink_category <- 1:5
+
+df1 <- data.frame(Dalc=drink_category, ratio=ratio_day)
+
+g3 <- ggplot(df1, mapping = aes(x = Dalc, y=ratio)) +
+    geom_point(alpha = .4, size = 3, color= "cornflowerblue") +
+    theme_bw() +
+    labs(x = "Consumption Level",
+         y = "Num(Single) / Num(Loved)") +
+    theme(plot.title = element_text(hjust = '0.5', size = 11.5)) +
+    geom_smooth(formula = y~x, method = "lm", color = "brown1") +
+    ggtitle("Ratio vs Consumption")
+
+# grid.arrange(g1, g3, ncol=2)
+
+title <- ggdraw() + draw_label("Figure 2.3 Romantic Relationship vs. Weekday Alcohol", fontface='bold')
+first_row <- plot_grid(g1, g3, nrow = 1, labels = "AUTO")
+plot_grid(title, first_row, nrow = 2, rel_heights = c(0.2, 1, 1))
+
+```
+Q4: How does parents' education impact alcohol consumption?
+
+Insight:
+Parents, especially with health related careers bear a strong influence on students' alcohol consumption on weekdays i.e, students with parents in health care tend to drink less during the week (as can be seen in below Fig A&B). Also, we see fathers play a stricter role in limiting students' drinking during weekend if they have a job at home or are either teachers or in health industry. We can see the decrease in mean value of alcohol consumption in Fig D compared to mean consumption seen in Fig C for mother's jobs.
+
+```{r Section 2 - Insight 4,  message=FALSE, warning=FALSE, echo=FALSE}
+
+dfej <- d1 %>% 
+    select(Mjob, Fjob, Medu, Fedu, Walc, Dalc)
+
+g6 <- ggplot(dfej, mapping = aes(x=Mjob, y=Dalc)) +
+    geom_boxplot() +
+    labs(x = "") +
+    theme_bw()
+
+g7 <- ggplot(dfej, mapping = aes(x=Fjob, y=Dalc)) +
+    geom_boxplot() +
+    labs(x = "", y = "") +
+    theme_bw()
+
+g8 <- ggplot(dfej, mapping = aes(x=Mjob, y=Walc)) +
+    geom_boxplot() +
+    theme_bw() +
+    labs(x = "Mother Jobs")
+
+g9 <- ggplot(dfej, mapping = aes(x=Fjob, y=Walc)) +
+    geom_boxplot() +
+    labs(y = "") + 
+    theme_bw() + 
+    labs(x = "Father Jobs")
+
+title <- ggdraw() + draw_label("Figure 2.4 Alcohol Consumption vs Jobs Type", fontface='bold')
+first_row <- plot_grid(g6, g7, g8, g9, nrow = 2, labels = "AUTO")
+plot_grid(title, first_row, nrow = 2, rel_heights = c(0.2, 1, 1))
+
+```
+## Section 3: Deep dive into factors impacting grades among mathematics students in Portuguese Schools
+
+Q1: How does performance in G1 and G2 impact the final grade G3?
+
+Insight: We see that G1 and G2 are very closely related to G3. A strong correlation of +0.8 is seen between G1 and G3, and +0.9 between G2 and G3. We also see that G1 and G2 have a correlation of +0.85. It is possible that doing well in G1 improves chances of performing in G2 which ultimately results in good G3 performance. We can also see that even though the mean of the grades are very close in the box plot, the spreads are different for G1, G2 and G3 (widest spread)
+
+```{r Section 3 - Insight 1, echo=FALSE, warning=FALSE, message=FALSE}
+
+#Calculating the correlation between G1 vs G2 and G2 vs G3
+correlation_g1_g2_g3<-d1%>%
+  select(G1, G2, G3)
+cormat <- cor(correlation_g1_g2_g3)
+
+#Visualizing using corrplot
+gc <- ggcorrplot(cormat, type = "lower") +
+  scale_fill_distiller(palette = "Spectral") +
+  ggtitle("Correlation of G1, G2, G3") +
+  theme(plot.title = element_text(size = 13, vjust = 13, hjust = "0.5"),
+        legend.key.size = unit(7, "pt"))
+
+#Analyzing spread of G1, G2 and G3 grade data columns
+grades_students <- d1 %>%
+  select(G1,G2,G3)%>%
+  pivot_longer(c(G1, G2, G3), names_to="Grades", values_to="Grade_Levels") %>%
+  group_by(Grades,Grade_Levels)
+
+grades_students$Grades = as.factor(grades_students$Grades)
+gg <- ggplot(grades_students, aes(x=Grades, y=Grade_Levels, color=Grades)) + 
+  geom_boxplot() + stat_summary(fun.y=mean, geom="point", size=2, color="red") +
+  theme_bw() +
+  labs(x = "Grades") +
+  ggtitle("Distribution of G1, G2, G3") +
+  theme(plot.title = element_text(size = 13, hjust = "0.5"),
+        legend.key.size = unit(7, "pt"))
+
+title <- ggdraw() + draw_label("Figure 3.1 G1 and G2 Impact the Final Grade G3", fontface='bold')
+first_row <- plot_grid(gc, gg, nrow = 1, labels = "AUTO")
+plot_grid(title, first_row, nrow = 2, rel_heights = c(0.2, 1, 1))
+
+```
+Q2: What factors are seen to impact the student performance in final exam G3?
+
+Insight:
+Study time has a strong correlation (0.55) with final performance in G3, ie more study time  translates to higher G3 score. If a student passes, they are 1.03x more likely to have spent a high amount of time studying. Also, if a student fails they are 1.08x more likely to have taken absences in the past; absences have a correlation of -0.41 with G3 grade. Health has correlation of -0.46 with G3, this is contrary to what was hypothesized earlier. Since correlation doesn't mean causation, there can be correlation that doesn't impact G3 performance. Finally, it's observed that if a student fails, they are 1.06x more likely to have higher travel time. There's a weak negative correlation -0.36 between travel time and G3 performance, ie more travel time leads to lower G3 score. 
+
+```{r Section 3 - Insight 2,  message=FALSE, warning=FALSE, echo=FALSE}
+
+#Analyzing G3 vs studytime
+c1 <- cor(d1$studytime,d1$G3)
+#Weak correlation = +0.098
+
+#summarizing G3 vs Studytime
+summary_G3vsstudytime<-d1%>%
+  select(studytime,G3)%>%
+  group_by(G3)%>%
+  summarise(total_students=n(), avg_studytime=mean(studytime))
+
+c2 <- cor(summary_G3vsstudytime$G3,summary_G3vsstudytime$avg_studytime)
+#Strong correlation(0.55), more study time higher G3 score
+
+#Visualizing studytime vs Pass or Fail in G3
+summary_G3vsstudytime1<-d1%>%select(G3, studytime)%>% group_by(G3)%>%summarise(total_abs=sum(studytime), num_students=n())
+
+summary_G3vsstudytime2<-summary_G3vsstudytime1%>%filter(G3<11)%>%summarise(total_abs1=sum(total_abs),num_students1=sum(num_students))%>%cbind(Pass_or_fail="Fail")
+summary_G3vsstudytime3<-summary_G3vsstudytime1%>%filter(G3>10)%>%summarise(total_abs1=sum(total_abs),num_students1=sum(num_students))%>%cbind(Pass_or_fail="Pass")
+
+summary_G3vsstudytime4<-summary_G3vsstudytime2%>%rbind(summary_G3vsstudytime3)%>%select(Pass_or_fail,total_abs1,num_students1)%>%
+  mutate(sum_total_abs1=sum(total_abs1),sum_num_students1=sum(num_students1))%>%
+  group_by(Pass_or_fail)%>%
+  mutate(percent_total_abs=total_abs1*100/sum_total_abs1,percent_num_students=num_students1*100/sum_num_students1)%>%
+  mutate(index=percent_total_abs/percent_num_students)
+
+#1.03x more likely to pass with high study time
+
+# Travel time vs G3
+c3 <- cor(d1$traveltime,d1$G3)
+#Weak negative correlation -0.117
+
+summary_G3vstraveltime<-d1%>%
+  select(traveltime,G3)%>%
+  group_by(G3)%>%
+  summarise(total_students=n(), avg_traveltime=mean(traveltime))
+
+c4 <- cor(summary_G3vstraveltime$G3,summary_G3vstraveltime$avg_traveltime)
+#weak negative correlation, more travel time lower G3 score
+
+summary_G3vstraveltime1<-d1%>%select(G3, traveltime)%>% group_by(G3)%>%summarise(total_abs=sum(traveltime), num_students=n())
+
+summary_G3vstraveltime2<-summary_G3vstraveltime1%>%filter(G3<11)%>%summarise(total_abs1=sum(total_abs),num_students1=sum(num_students))%>%cbind(Pass_or_fail="Fail")
+summary_G3vstraveltime3<-summary_G3vstraveltime1%>%filter(G3>10)%>%summarise(total_abs1=sum(total_abs),num_students1=sum(num_students))%>%cbind(Pass_or_fail="Pass")
+
+summary_G3vstraveltime4<-summary_G3vstraveltime2%>%rbind(summary_G3vstraveltime3)%>%select(Pass_or_fail,total_abs1,num_students1)%>%
+  mutate(sum_total_abs1=sum(total_abs1),sum_num_students1=sum(num_students1))%>%
+  group_by(Pass_or_fail)%>%
+  mutate(percent_total_abs=total_abs1*100/sum_total_abs1,percent_num_students=num_students1*100/sum_num_students1)%>%
+  mutate(index=percent_total_abs/percent_num_students)
+
+#-0.363 correlation between traveltime and Final grade
+
+#Relation between Absences vs G3
+summary_G3vsabs<-d1%>%
+  select(absences,G3)%>%
+  group_by(G3)%>%
+  summarise(total_students=n(), avg_absences=mean(absences))
+
+c5 <- cor(summary_G3vsabs$G3,summary_G3vsabs$avg_absences)
+#negative correlation = -0.41, more absences lower score
+
+summary_G3vsabs1<-d1%>%select(G3, absences)%>% group_by(G3)%>%summarise(total_abs=sum(absences), num_students=n())
+
+summary_G3vsabs2<-summary_G3vsabs1%>%filter(G3<11)%>%summarise(total_abs1=sum(total_abs),num_students1=sum(num_students))%>%cbind(Pass_or_fail="Fail")
+summary_G3vsabs3<-summary_G3vsabs1%>%filter(G3>10)%>%summarise(total_abs1=sum(total_abs),num_students1=sum(num_students))%>%cbind(Pass_or_fail="Pass")
+
+summary_G3vsabs4<-summary_G3vsabs2%>%rbind(summary_G3vsabs3)%>%select(Pass_or_fail,total_abs1,num_students1)%>%
+  mutate(sum_total_abs1=sum(total_abs1),sum_num_students1=sum(num_students1))%>%
+  group_by(Pass_or_fail)%>%
+  mutate(percent_total_abs=total_abs1*100/sum_total_abs1,percent_num_students=num_students1*100/sum_num_students1)%>%
+  mutate(index=percent_total_abs/percent_num_students)
+
+#if a person fails they are 1.08x more times likely to have taken absences in the past
+
+
+# Plotting how health is impacting the grades
+sample_data <- d1%>%
+  select(G3, health)%>%
+  group_by(G3, health)%>%
+  summarise(num_students=n())
+
+
+#To measure the relation calculating summary
+summary_G3vshealth<-sample_data%>%
+  group_by(health)%>%
+  summarise(total_students=sum(num_students), avg_score=mean(G3))
+
+
+#Now, checking correlation
+c6 <- cor(summary_G3vshealth$health,summary_G3vshealth$avg_score)
+#Not very strong correlation but not weak too -0.46
+#Health did not play a very significant role in G3 performance
+
+#Visuaizing the Health vs G3 trend
+health_grade <- d1 %>%
+  mutate(Pass.Fail = ifelse(G3 > 10, "Pass", "Fail")) %>%
+  group_by(Pass.Fail, health) %>%
+  summarize(Freq = n())
+
+p5_mat <- ggplot(health_grade,
+                 aes(y = Freq, axis1 = health, axis2 = Pass.Fail)) +
+  scale_x_discrete(limits = c("health", "Pass.Fail"), expand = c(.2, .05)) +
+  geom_alluvium(aes(fill = Pass.Fail)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_bw() +
+  ggtitle("Health vs Pass or Fail") +
+  theme(plot.title = element_text(size = 13, hjust = "0.5"),
+        legend.position = "none")
+
+# p5_mat
+
+health_grade_final<-pivot_wider(health_grade,names_from = Pass.Fail ,values_from = Freq)%>%
+  group_by(health)%>%
+  mutate(index=Pass/Fail)
+
+
+#Relation between Age and Weekend alcohol consumption and G3
+
+
+student_mat_alc_v_grade <- d1 %>%
+  mutate(Result = ifelse(G3 > 10, "Pass", "Fail")) %>%
+  group_by(Walc, Result, age) %>%
+  summarize(Freq = n())
+
+plot_data<-student_mat_alc_v_grade%>%filter(age<18)
+
+p6_mat <- ggplot(plot_data,
+                 aes(y = Freq, axis1 = Walc, axis2 = age)) +
+  scale_x_discrete(limits = c("Walc", "age"), expand = c(.2, .05)) +
+  geom_alluvium(aes(fill = Result)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_bw() +
+  ggtitle("Walc vs Age wrt\nPass or Fail") +
+  theme(plot.title = element_text(size = 13, hjust = "0.5"),
+        legend.key.size = unit(7, "pt"))
+
+# p6_mat
+
+
+title <- ggdraw() + draw_label("What factors are seen to impact the\nstudent performance in final exam G3?", fontface='bold')
+first_row <- plot_grid(p5_mat, p6_mat, nrow = 1, labels = "AUTO")
+plot_grid(title, first_row, nrow = 2, rel_heights = c(0.2, 1, 1))
+```
+
+Q3: What are the most important variables that can be used to predict final grade (G3) performance?
+
+Insight: Higher the variable importance, the more strongly the variable impacts "Pass" or "Fail" metric in the final G3 exam. Most important metrics in green color like G2, G1, failures, travel time etc can be used in combination to predict the final grade G3 for any student.
+
+```{r Section 3 - Insight 3,  message=FALSE, warning=FALSE, echo=FALSE}
+label <- LabelEncoder$new()
+
+data_clean<-d1
+
+data_clean$school <- label$fit_transform(data_clean$school)
+data_clean$sex <- label$fit_transform(data_clean$sex)
+data_clean$address <- label$fit_transform(data_clean$address)
+data_clean$famsize <- label$fit_transform(data_clean$famsize)
+data_clean$Pstatus <- label$fit_transform(data_clean$Pstatus)
+data_clean$Mjob <- label$fit_transform(data_clean$Mjob)
+data_clean$Fjob <- label$fit_transform(data_clean$Fjob)
+data_clean$reason <- label$fit_transform(data_clean$reason)
+data_clean$higher <- label$fit_transform(data_clean$higher)
+data_clean$guardian <- label$fit_transform(data_clean$guardian)
+data_clean$schoolsup <- label$fit_transform(data_clean$schoolsup)
+data_clean$famsup <- label$fit_transform(data_clean$famsup)
+data_clean$paid <- label$fit_transform(data_clean$paid)
+data_clean$activities <- label$fit_transform(data_clean$activities)
+data_clean$nursery <- label$fit_transform(data_clean$nursery)
+data_clean$internet <- label$fit_transform(data_clean$internet)
+data_clean$romantic <- label$fit_transform(data_clean$romantic)
+
+#Adding our final y variable Pass or Fail
+data_clean_pass<-data_clean%>%
+  filter(G3>10)%>%
+  mutate(Pass_or_Fail=1)
+
+data_clean_fail<-data_clean%>%
+  filter(G3<11)%>%
+  mutate(Pass_or_Fail=0)
+
+data_main<-data_clean_pass%>%
+  rbind(data_clean_fail)
+
+data_main <- subset(data_main, select = -c(G3) )
+
+
+# Variable importance
+
+trainData <- data_main
+
+boruta_output <- Boruta(Pass_or_Fail ~ ., data=na.omit(trainData), doTrace=0)  
+
+# Plot variable importance
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Figure 3.3 Variable Importance")  
+
+```
+
+## Summary and Conclusion
+To summarize, the following analysis was conducted:
+
+Section 1: Understanding Student Audience in Mathematics class of Portuguese schools
+Q1: Who are the students taking mathematics classes in Portugal?
+Q2: What is the family background for mathematics students in Portugal?
+Q3: How do mathematics students behave/think based on the subject data set in Portugal?
+
+Section 2: Analyzing factors impacting alcohol consumption among math students in Portuguese schools
+Q1: When and what age groups consume alcohol in Portugal?
+Q2: How does Pstatus impact alcohol consumption?
+Q3: How does romantic involvement impact alcohol consumption?
+Q4: How does parents' education impact alcohol consumption?
+
+Section 3: Deep dive into factors impacting grades among mathematics students in Portuguese schools
+Q1: How does performance in G1 and G2 impact the final grade G3?
+Q2: What factors are seen to impact the student performance in final exam G3?
+Q3: What are the most important variables that can be used to predict the final grade G3 performance?
+
+In Section 1, we tried to understand demographic and psychological behavior of students enrolled in Mathematics class in Portuguese schools. We saw that mathematics classes majorly consisted of students of ages between 15-18 and higher percentage of females were enrolled in the course. We also saw that having mother as primary guardian impacts the alcohol consumption and final G3 grades. The job and education of the student's mother played a crucial role in predicting the final G3 performance. Also, we found that larger number of students live in urban areas and have a lower travel time to schools due to this. 
+
+Then, in section 2, we tried to see what factors lead to alcohol consumption by students. Here we explored that most students have low alcohol consumption on workdays and weekend and are likely to drink more on weekends compared to weekdays. We didn't see a very significant impact of Pstatus (Parents separated or Together) on their alcohol consumption habits. We then found that being in a relationship resulted in more alcohol consumption on a workday.
+
+Finally in section 3, we wanted to see if the alcohol consumption impacted final exam performance, and how we can use few variables from the entire dataset of 33 columns to predict the likely grade of a student. Here, we saw that G1 and G2 performance was crucial for good G3 final exam performance. Past failures, large travel times, Mother's job play an important role in predicting the final G3 performance. Using just these 5-6 variables we can predict the final G3 grade without using all the 33 variables in the complete dataset.
+
+## References
+1. P. Cortez and A. Silva. Using Data Mining to Predict Secondary School Student Performance. In A. Brito and J. Teixeira Eds., Proceedings of 5th FUture BUsiness TEChnology Conference (FUBUTEC 2008) pp. 5-12, Porto, Portugal, April, 2008, EUROSIS, ISBN 978-9077381-39-7.
+
+2. Eurostat, 2007. Early school-leavers. http://epp.eurostat.ec.europa.eu/
